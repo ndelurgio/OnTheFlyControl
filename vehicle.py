@@ -1,6 +1,7 @@
+from eom_dynamics import *
 import numpy as np
 class vehicle():
-    def __init__(mass,Ixx,Iyy,Izz,r_motor,K_T,K_M,K_Y):
+    def __init__(self,mass,Ixx,Iyy,Izz,r_motor,K_T,K_M,K_Y):
         self.mass = mass
         self.Ixx = Ixx
         self.Iyy = Iyy
@@ -10,20 +11,29 @@ class vehicle():
         self.K_M = K_M
         self.K_Y = K_Y
 
-        self.pos = np.array([0,0,0])
-        self.vel = np.array([0,0,0])
-        self.dcm = np.array([1,0,0],[0,1,0],[0,0,1])
-        self.bodyRates = np.array([0,0,0])
+        self.pos = np.matrix([[0,0,0]]).T
+        self.vel = np.matrix([[0,0,0]]).T
+        self.DCM = np.matrix([[1,0,0],[0,1,0],[0,0,1]])
+        self.omega = np.matrix([[0,0,0]]).T
+        self.a_prev = np.matrix([[0,0,0]]).T
+        self.Cdot_prev = np.zeros([3,3])
+        self.alpha_prev = np.matrix([[0,0,0]]).T
 
+        self.dynamics = eom_dynamics(mass,Ixx,Iyy,Izz,r_motor,K_T,K_M,K_Y)
 
-        self.dynamics = eom_dynamics() #figure out inheritance
-
-    def lin_kinematics():
-        a_x_b, a_y_b, a_z_b = self.dynamics.getLinAccel()
-        #account for gravity
-        #use dcm to rotate to inertial
-    def ang_kinematics():
-        #get body ang vels
-        #use DCM_dot equation (inputs are previous dcm and current body rates)
-        # integrate DCM_dot
-        #    
+    def eom(self,dt, w1,w2,w3,w4):
+        alpha = self.dynamics.getAngAccel(w1,w2,w3,w4,self.omega)
+        self.omega = self.omega + dt/2*(self.alpha_prev + alpha)
+        S_omega = np.matrix([[0, self.omega[2,0], -1*self.omega[1,0]],[-1*self.omega[2,0], 0, self.omega[0,0]],[self.omega[1,0], self.omega[0,0], 0]])
+        Cdot = S_omega*self.DCM#np.dot(S_omega,self.DCM)
+        # print(Cdot)
+        self.DCM = self.DCM + dt/2*(self.Cdot_prev+Cdot)
+        a = self.DCM*self.dynamics.getLinAccel(w1,w2,w3,w4) + np.matrix([[0,0,-9.806]]).T
+        v = self.vel + dt/2*(self.a_prev+a)
+        self.pos = self.pos + dt/2*(self.vel+v)
+        self.vel = v
+        self.alpha_prev = alpha
+        self.Cdot_prev = Cdot
+        self.a_prev = a
+        self.v_prev = v
+        return self.DCM, self.vel, self.pos
